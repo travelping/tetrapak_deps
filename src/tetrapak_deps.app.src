@@ -1,0 +1,15 @@
+{application, tetrapak_deps, [
+    {description, ""},
+    {vsn, ["0.0"]},
+    {applications, [kernel, stdlib, erlgit, sh]},
+    {registered, []},
+    {env,
+        [
+         {erl_libs, ".erl_libs"},
+         {shortcuts,
+            [
+             {github, git, "https://github.com/"}
+            ]}
+        ]
+    }
+]}.
