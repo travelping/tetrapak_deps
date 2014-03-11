@@ -59,12 +59,8 @@ load_app(Dir) ->
     ProjectConfig = tetrapak_task_boot:tetrapak_config(Dir, #config{values = BaseConfig}).
 
 deps_build(Deps) ->
-    Installed = [{element(1, DepDir), install_app(DepDir)} || DepDir <- Deps],
-    Failed = lists:filter(fun({_, {Result, _}}) -> Result =/= ok end, Installed),
-    case Failed of
-        [] -> done;
-        Failed -> tetrapak:fail("Can't compile dependencies: ~p~n", [[App || {App, _} <- Failed]])
-    end.
+    [install_app(DepDir) || DepDir <- Deps],
+    done.
 
 deps_dirs() ->
     Manager  = init_manager(),
@@ -84,16 +80,16 @@ get_deps() ->
         true ->
             expand_shortcuts(tetrapak:config("dev.deps", []));
         false ->
-            rebar_deps()
-    end.
-
-rebar_deps() ->
-    case file:consult(tetrapak:path("rebar.config")) of
-        {ok, Config} ->
-            [{App, Conf} || {App, _, Conf} <- proplists:get_value(deps, Config, [])];
-        _ ->
             []
     end.
+
+%rebar_deps() ->
+%    case file:consult(tetrapak:path("rebar.config")) of
+%        {ok, Config} ->
+%            [{App, Conf} || {App, _, Conf} <- proplists:get_value(deps, Config, [])];
+%        _ ->
+%            []
+%    end.
 
 expand_shortcuts(Deps) ->
     {ok, Shortcuts} = application:get_env(tetrapak_deps, shortcuts),
@@ -148,21 +144,10 @@ download_app({_App, {git, Repo, Info}, Dir} = Dep, Acc) ->
             [Dep | Acc]
     end.
 
-install_app({App, _, Dir}) ->
-    io:format(user, "Compiling application ~s~n", [App]),
-    sh:sh("tetrapak build", [{cd, Dir}, {use_stdout, true}, return_on_error]).
-
-%dependency_manager(Manager, AppDepsInstalled, Dependencies) ->
-%    lists:foldl(fun(App, ))
-%    DepsFromDeps = [detect_deps(Manager, Dep) || Dep <- Dependencies -- AppDepsInstalled],
-%    [remove_deps(Manager, Dep) || Dep <- AppDepsInstalled -- Dependencies -- DepsFromDeps].
-%detect_deps(Manager, {App, _, {git, Github, Version}}) ->
-%    case dets:lookup(Dets, {dep, App, Github, Version}) of
-%        [] ->
-%            [];
-%        [{Key, Counter}] ->
-%            dets:insert(Dets, {Key, Counter + 1})
-%    end.
+install_app({_App, _, Dir}) ->
+    tetrapak_context:add_directory(tetrapak_task:context(), Dir),
+    ok = tetrapak_task:require_all(Dir, ["tetrapak:boot"]),
+    ok = tetrapak_task:require_all(Dir, ["deps", "build"]).
 
 loadpathes() ->
     [check_deps(Path) || Path <- code:get_path()].
