@@ -6,7 +6,7 @@
 -behaviour(tetrapak_task).
 -export([run/2]).
 
--export([loadpathes/0, load_app/1]).
+-export([loadpathes/0]).
 
 -include_lib("tetrapak/include/tetrapak.hrl").
 
@@ -23,7 +23,11 @@ app() ->
 
 tasks(tasks) ->
     [
-     {"tetrapak:startapp",  ?MODULE, "Start the current application"},
+     {"build:loaddeps",  ?MODULE, "Load application dependencies, if exists", [{run_before, ["build:erlang"]}]},
+     {"tetrapak:deps",  ?MODULE, "Get dependencies"},
+     {"tetrapak:depsboot",  ?MODULE, "Apply boot on all dependencies"},
+     {"tetrapak:load:path",  ?MODULE, "Load application dependencies"},
+     {"tetrapak:load:deps",  ?MODULE, "Load application dependencies"},
      {"deps:download", ?MODULE, "Download application dependencies"},
      {"deps:build",  ?MODULE, "Install application dependencies"},
      {"force:deps:build",  ?MODULE, "Install application dependencies"}
@@ -32,31 +36,60 @@ tasks(tasks) ->
 tasks(_) ->
     [].
 
+run("tetrapak:deps", _) ->
+    {done, [{info, deps_dirs()}]};
+
+run("build:loaddeps", _) ->
+    ok = tetrapak_task:require_all(["tetrapak:load:deps"]),
+    done;
+run("tetrapak:depsboot", _) ->
+    on_deps(fun boot_dir_rec/1),
+    done;
+
+run("tetrapak:load:path", _) ->
+    code:add_patha(tetrapak:path("ebin")),
+    done;
+
+run("tetrapak:load:deps", _) ->
+    on_deps(fun({_, _, Dir}) ->
+                    case filelib:is_dir(Dir) of
+                        true ->
+                            ok = tetrapak_task:require_all(["tetrapak:depsboot"]),
+                            ok = tetrapak_task:require_all(Dir, ["tetrapak:load:path", "tetrapak:load:deps"]);
+                        false ->
+                            ok
+                    end
+            end),
+    done;
+
 run("deps:download", _) ->
-    DepsDirs = deps_dirs(),
-    Acc = lists:foldl(fun(App, Acc) -> download_app(App, Acc) end, [], DepsDirs),
+    application:set_env(tetrapak, plugin_scan, true),
+    ok = tetrapak_task:require_all(["tetrapak:deps"]),
+    Acc = lists:foldl(fun(App, Acc) -> download_app(App, Acc) end, [], tetrapak:get("tetrapak:deps:info")),
     {done, [{deps, lists:reverse(Acc)}]};
 
-
 run("deps:build", _) ->
-    tetrapak:require("deps:download"),
-    Deps = tetrapak:get("deps:download:deps"),
-    deps_build(lists:reverse(Deps));
+    require_download(),
+    deps_build(lists:reverse(tetrapak:get("deps:download:deps")));
 
 run("force:deps:build", _) ->
-    deps_build(deps_dirs());
+    require_download(),
+    deps_build(tetrapak:get("tetrapak:deps:info"));
 
 run("tetrapak:startapp", Extra) ->
-    [load_app(Dir) || {_, _, Dir} <- deps_dirs()],
     tetrapak_task_shell:run("tetrapak:startapp", Extra).
 
 % --------------------------------------------------------------------------------------------------
 % -- Helpers
+require_download() ->
+    application:set_env(tetrapak, plugin_scan, true),
+    ok = tetrapak:require("deps:download"),
+    ok = tetrapak:require("tetrapak:depsboot").
 
-load_app(Dir) ->
-    code:add_patha(filename:join(Dir, "ebin")),
-    {ok, BaseConfig} = application:get_env(tetrapak, config),
-    ProjectConfig = tetrapak_task_boot:tetrapak_config(Dir, #config{values = BaseConfig}).
+on_deps(Fun) -> on_deps(Fun, []).
+on_deps(Fun, Required) ->
+    ok = tetrapak_task:require_all(["tetrapak:deps"] ++ Required),
+    [Fun(Dep) || Dep <- tetrapak:get("tetrapak:deps:info")].
 
 deps_build(Deps) ->
     [install_app(DepDir) || DepDir <- Deps],
@@ -141,13 +174,23 @@ download_app({_App, {git, Repo, Info}, Dir} = Dep, Acc) ->
             Acc;
         false ->
             {ok, _} = git:download(Repo, Dir, Info),
+            boot_dir(Dir),
+            ok = tetrapak_task:require_all(Dir, ["deps"]),
             [Dep | Acc]
     end.
 
-install_app({_App, _, Dir}) ->
+boot_dir_rec(Dir) ->
+    ok = tetrapak_task:require_all(boot_dir(Dir), ["tetrapak:depsboot"]).
+
+boot_dir({_, _, Dir}) ->
+    boot_dir(Dir);
+boot_dir(Dir) ->
     tetrapak_context:add_directory(tetrapak_task:context(), Dir),
     ok = tetrapak_task:require_all(Dir, ["tetrapak:boot"]),
-    ok = tetrapak_task:require_all(Dir, ["deps", "build"]).
+    Dir.
+
+install_app({_App, _, Dir}) ->
+    ok = tetrapak_task:require_all(Dir, ["deps", "build", "tetrapak:load:path"]).
 
 loadpathes() ->
     [check_deps(Path) || Path <- code:get_path()].
