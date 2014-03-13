@@ -23,6 +23,7 @@ app() ->
 
 tasks(tasks) ->
     [
+     {"info:application", ?MODULE, "Get application name"},
      {"build:loaddeps",  ?MODULE, "Load application dependencies, if exists", [{run_before, ["build:erlang"]}]},
      {"tetrapak:deps",  ?MODULE, "Get dependencies"},
      {"tetrapak:depsboot",  ?MODULE, "Apply boot on all dependencies"},
@@ -35,6 +36,9 @@ tasks(tasks) ->
 
 tasks(_) ->
     [].
+
+run("info:application", _) ->
+    {done, [{name, appname([{"src/", ".app.src"}, {"ebin/", ".app"}])}]};
 
 run("tetrapak:deps", _) ->
     {done, [{info, deps_dirs()}]};
@@ -81,6 +85,17 @@ run("tetrapak:startapp", Extra) ->
 
 % --------------------------------------------------------------------------------------------------
 % -- Helpers
+appname([]) ->
+    tetrapak:fail("no application name found for the application directory~s~n", [tetrapak:dir()]);
+appname([{Dir, Ext} | Rest]) ->
+    case filelib:wildcard(filename:join(tetrapak:path(Dir), "*" ++ Ext)) of
+        [AppFile] ->
+            Name = filename:basename(AppFile, Ext),
+            list_to_atom(Name);
+        _ ->
+            appname(Rest)
+    end.
+
 require_download() ->
     application:set_env(tetrapak, plugin_scan, true),
     ok = tetrapak:require("deps:download"),
@@ -106,7 +121,7 @@ init_manager() ->
     file:make_dir(ErlLibsDir),
     #lib_manager{lib_dir = ErlLibsDir,
                  cache = load_cache(ErlLibsDir),
-                 current_app = appname()}.
+                 current_app = tetrapak:get("info:application:name")}.
 
 get_deps() ->
     case filelib:is_file(tetrapak:path("tetrapak/config.ini")) of
@@ -153,11 +168,6 @@ load_cache(ErlLibsDir) ->
             tpk_file:delete(File),
             []
     end.
-
-appname() ->
-    [AppSrc] = filelib:wildcard(filename:join(tetrapak:path("src/"), "*.app.src")),
-    Name = filename:basename(AppSrc, ".app.src"),
-    list_to_atom(Name).
 
 build_dir({App, {git, Repo}}, Manager) -> build_dir({App, {git, Repo, "master"}}, Manager);
 build_dir({App, {git, Repo, Info}}, #lib_manager{lib_dir = LibDir}) ->
