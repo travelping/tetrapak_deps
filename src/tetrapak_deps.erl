@@ -23,15 +23,16 @@ app() ->
 
 tasks(tasks) ->
     [
-     {"info:application", ?MODULE, "Get application name"},
-     {"build:loaddeps",  ?MODULE, "Load application dependencies, if exists", [{run_before, ["build:erlang"]}]},
-     {"tetrapak:deps",  ?MODULE, "Get dependencies"},
-     {"tetrapak:depsboot",  ?MODULE, "Apply boot on all dependencies"},
+     {"info:application",    ?MODULE, "Get application name"},
+     {"build:loaddeps",      ?MODULE, "Load application dependencies, if exists", [{run_before, ["build:erlang"]}]},
+     {"tetrapak:deps",       ?MODULE, "Get dependencies"},
+     {"tetrapak:depsboot",   ?MODULE, "Apply boot on all dependencies"},
      {"tetrapak:load:path",  ?MODULE, "Load application dependencies"},
      {"tetrapak:load:deps",  ?MODULE, "Load application dependencies"},
-     {"deps:download", ?MODULE, "Download application dependencies"},
-     {"deps:build",  ?MODULE, "Install application dependencies"},
-     {"force:deps:build",  ?MODULE, "Install application dependencies"}
+     {"deps:download",       ?MODULE, "Download application dependencies"},
+     {"deps:build",          ?MODULE, "Install application dependencies"},
+     {"force:deps:download", ?MODULE, "Install application dependencies"},
+     {"force:deps:build",    ?MODULE, "Install application dependencies"}
     ];
 
 tasks(_) ->
@@ -67,17 +68,17 @@ run("tetrapak:load:deps", _) ->
     done;
 
 run("deps:download", _) ->
-    application:set_env(tetrapak, plugin_scan, true),
-    ok = tetrapak_task:require_all(["tetrapak:deps"]),
-    Acc = lists:foldl(fun(App, Acc) -> download_app(App, Acc) end, [], tetrapak:get("tetrapak:deps:info")),
-    {done, [{deps, lists:reverse(Acc)}]};
+    deps_download(false);
 
 run("deps:build", _) ->
     require_download(),
     deps_build(lists:reverse(tetrapak:get("deps:download:deps")));
 
+run("force:deps:download", _) ->
+    deps_download(true);
+
 run("force:deps:build", _) ->
-    require_download(),
+    require_download("force:deps:download"),
     deps_build(tetrapak:get("tetrapak:deps:info"));
 
 run("tetrapak:startapp", Extra) ->
@@ -96,14 +97,17 @@ appname([{Dir, Ext} | Rest]) ->
             appname(Rest)
     end.
 
+deps_download(Force) ->
+    Acc = lists:foldl(fun(App, Acc) -> download_app(App, Acc, Force) end, [], tetrapak:get("tetrapak:deps:info")),
+    {done, [{deps, lists:reverse(Acc)}]}.
+
 require_download() ->
-    application:set_env(tetrapak, plugin_scan, true),
-    ok = tetrapak:require("deps:download"),
+    require_download("deps:download").
+require_download(Task) ->
+    ok = tetrapak:require(Task),
     ok = tetrapak:require("tetrapak:depsboot").
 
-on_deps(Fun) -> on_deps(Fun, []).
-on_deps(Fun, Required) ->
-    ok = tetrapak_task:require_all(["tetrapak:deps"] ++ Required),
+on_deps(Fun) ->
     [Fun(Dep) || Dep <- tetrapak:get("tetrapak:deps:info")].
 
 deps_build(Deps) ->
@@ -178,16 +182,21 @@ build_folder_name(AppName, Value) -> AppName ++ "-" ++ cut(Value).
 cut(Value) when length(Value) > 8 -> string:substr(Value, 1, 8);
 cut(Value) -> Value.
 
-download_app({_App, {git, Repo, Info}, Dir} = Dep, Acc) ->
-    case filelib:is_dir(Dir) of
-        true ->
+download_app({_App, {git, Repo, Info}, Dir} = Dep, Acc, Force) ->
+    case {filelib:is_dir(Dir), Force} of
+        {true, false} ->
+            download_app_rec(Dir),
             Acc;
-        false ->
+        {Exists, _} ->
+            Force andalso Exists andalso tpk_file:delete(Dir),
             {ok, _} = git:download(Repo, Dir, Info),
-            boot_dir(Dir),
-            ok = tetrapak_task:require_all(Dir, ["deps"]),
+            download_app_rec(Dir),
             [Dep | Acc]
     end.
+
+download_app_rec(Dir) ->
+    boot_dir(Dir),
+    ok = tetrapak_task:require_all(Dir, ["deps"]).
 
 boot_dir_rec(Dir) ->
     ok = tetrapak_task:require_all(boot_dir(Dir), ["tetrapak:depsboot"]).
