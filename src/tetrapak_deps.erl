@@ -23,7 +23,6 @@ app() ->
 
 tasks(tasks) ->
     [
-     {"info:application",    ?MODULE, "Get application name"},
      {"build:loaddeps",      ?MODULE, "Load application dependencies, if exists", [{run_before, ["build:erlang"]}]},
      {"tetrapak:deps",       ?MODULE, "Get dependencies"},
      {"tetrapak:depsboot",   ?MODULE, "Apply boot on all dependencies"},
@@ -37,9 +36,6 @@ tasks(tasks) ->
 
 tasks(_) ->
     [].
-
-run("info:application", _) ->
-    {done, [{name, appname([{"src/", ".app.src"}, {"ebin/", ".app"}])}]};
 
 run("tetrapak:deps", _) ->
     {done, [{info, deps_dirs()}]};
@@ -86,16 +82,6 @@ run("tetrapak:startapp", Extra) ->
 
 % --------------------------------------------------------------------------------------------------
 % -- Helpers
-appname([]) ->
-    tetrapak:fail("no application name found for the application directory~s~n", [tetrapak:dir()]);
-appname([{Dir, Ext} | Rest]) ->
-    case filelib:wildcard(filename:join(tetrapak:path(Dir), "*" ++ Ext)) of
-        [AppFile] ->
-            Name = filename:basename(AppFile, Ext),
-            list_to_atom(Name);
-        _ ->
-            appname(Rest)
-    end.
 
 deps_download(Force) ->
     Acc = lists:foldl(fun(App, Acc) -> download_app(App, Acc, Force) end, [], tetrapak:get("tetrapak:deps:info")),
