@@ -30,7 +30,7 @@ tasks(tasks) ->
      {"tetrapak:load:deps",  ?MODULE, "Load application dependencies"},
      {"deps:download",       ?MODULE, "Download application dependencies"},
      {"deps:build",          ?MODULE, "Install application dependencies"},
-     {"force:deps:download", ?MODULE, "Install application dependencies"},
+     {"force:deps:download", ?MODULE, "Download application dependencies", [{run_before, ["force:deps:build"]}]},
      {"force:deps:build",    ?MODULE, "Install application dependencies"}
     ];
 
@@ -68,14 +68,14 @@ run("deps:download", _) ->
 
 run("deps:build", _) ->
     require_download(),
-    deps_build(lists:reverse(tetrapak:get("deps:download:deps")));
+    deps_build(lists:reverse(tetrapak:get("deps:download:deps")), false);
 
 run("force:deps:download", _) ->
     deps_download(true);
 
 run("force:deps:build", _) ->
-    require_download("force:deps:download"),
-    deps_build(tetrapak:get("tetrapak:deps:info"));
+    ok = tetrapak:require("tetrapak:depsboot"),
+    deps_build(tetrapak:get("tetrapak:deps:info"), true);
 
 run("tetrapak:startapp", Extra) ->
     tetrapak_task_shell:run("tetrapak:startapp", Extra).
@@ -96,8 +96,8 @@ require_download(Task) ->
 on_deps(Fun) ->
     [Fun(Dep) || Dep <- tetrapak:get("tetrapak:deps:info")].
 
-deps_build(Deps) ->
-    [install_app(DepDir) || DepDir <- Deps],
+deps_build(Deps, Force) ->
+    [install_app(DepDir, Force) || DepDir <- Deps],
     done.
 
 deps_dirs() ->
@@ -153,7 +153,7 @@ load_cache(ErlLibsDir) ->
         {ok, [Apps]} ->
             Apps;
         {error, Error} ->
-            io:format(user, "error: ~p~n", [Error]),
+            io:format("error: ~p~n", [Error]),
             io:format("dependency infos corrupted, deleting it...~n", []),
             tpk_file:delete(File),
             []
@@ -171,18 +171,17 @@ cut(Value) -> Value.
 download_app({_App, {git, Repo, Info}, Dir} = Dep, Acc, Force) ->
     case {filelib:is_dir(Dir), Force} of
         {true, false} ->
-            download_app_rec(Dir),
             Acc;
         {Exists, _} ->
             Force andalso Exists andalso tpk_file:delete(Dir),
             {ok, _} = git:download(Repo, Dir, Info),
-            download_app_rec(Dir),
+            download_app_rec(Dir, Force),
             [Dep | Acc]
     end.
 
-download_app_rec(Dir) ->
+download_app_rec(Dir, Force) ->
     boot_dir(Dir),
-    ok = tetrapak_task:require_all(Dir, ["deps"]).
+    tetrapak_task:require_all(Dir, [deps_task("deps:download", Force)]).
 
 boot_dir_rec(Dir) ->
     ok = tetrapak_task:require_all(boot_dir(Dir), ["tetrapak:depsboot"]).
@@ -194,8 +193,11 @@ boot_dir(Dir) ->
     ok = tetrapak_task:require_all(Dir, ["tetrapak:boot"]),
     Dir.
 
-install_app({_App, _, Dir}) ->
-    ok = tetrapak_task:require_all(Dir, ["deps", "build", "tetrapak:load:path"]).
+install_app({_App, _, Dir}, Force) ->
+    [ok = tetrapak_task:require_all(Dir, [Task]) || Task <- [deps_task("deps", Force), "build", "tetrapak:load:path"]].
+
+deps_task(Name, false) -> Name;
+deps_task(Name, true) -> "force:" ++ Name.
 
 loadpathes() ->
     [check_deps(Path) || Path <- code:get_path()].
