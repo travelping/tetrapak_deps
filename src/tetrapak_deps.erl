@@ -23,11 +23,10 @@ app() ->
 
 tasks(tasks) ->
     [
-     {"build:loaddeps",      ?MODULE, "Load application dependencies, if exists", [{run_before, ["build:erlang"]}]},
      {"tetrapak:deps",       ?MODULE, "Get dependencies"},
      {"tetrapak:depsboot",   ?MODULE, "Apply boot on all dependencies"},
      {"tetrapak:load:path",  ?MODULE, "Load application dependencies"},
-     {"tetrapak:load:deps",  ?MODULE, "Load application dependencies"},
+     {"tetrapak:load:deps",  ?MODULE, "Load application dependencies", [{run_before, ["build"]}]},
      {"deps:download",       ?MODULE, "Download application dependencies"},
      {"deps:build",          ?MODULE, "Install application dependencies"},
      {"force:deps:download", ?MODULE, "Download application dependencies", [{run_before, ["force:deps:build"]}]},
@@ -40,9 +39,6 @@ tasks(_) ->
 run("tetrapak:deps", _) ->
     {done, [{info, deps_dirs()}]};
 
-run("build:loaddeps", _) ->
-    ok = tetrapak_task:require_all(["tetrapak:load:deps"]),
-    done;
 run("tetrapak:depsboot", _) ->
     on_deps(fun boot_dir_rec/1),
     done;
