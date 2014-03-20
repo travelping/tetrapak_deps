@@ -64,7 +64,7 @@ run("deps:download", _) ->
 
 run("deps:build", _) ->
     require_download(),
-    deps_build(lists:reverse(tetrapak:get("deps:download:deps")), false);
+    deps_build(tetrapak:get("deps:download:deps"), false);
 
 run("force:deps:download", _) ->
     deps_download(true);
