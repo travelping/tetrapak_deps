@@ -25,7 +25,7 @@ tasks(tasks) ->
     [
      {"tetrapak:deps",       ?MODULE, "Get dependencies"},
      {"tetrapak:depsboot",   ?MODULE, "Apply boot on all dependencies"},
-     {"tetrapak:load:path",  ?MODULE, "Load application dependencies"},
+     {"tetrapak:load:path",  ?MODULE, "Load application path"},
      {"tetrapak:load:deps",  ?MODULE, "Load application dependencies", [{run_before, ["build"]}]},
      {"deps:download",       ?MODULE, "Download application dependencies"},
      {"deps:build",          ?MODULE, "Install application dependencies"},
@@ -50,9 +50,10 @@ run("tetrapak:load:path", _) ->
 run("tetrapak:load:deps", _) ->
     ok = tetrapak_task:require_all(["tetrapak:depsboot"]),
     on_deps(fun({_, _, Dir}) ->
+                    io:format(user, "try load: ~s~n", [Dir]),
                     case filelib:is_dir(Dir) of
                         true  ->
-                            tetrapak_task:require_all(Dir, ["tetrapak:load:path", "tetrapak:load:deps"]);
+                            ok = tetrapak_task:require_all(Dir, ["tetrapak:load:path", "tetrapak:load:deps"]);
                         false ->
                             io:format("dependency doesn't exists: ~s~n", [Dir])
                     end
@@ -182,7 +183,7 @@ download_app_rec(Dir, Force) ->
     boot_dir(Dir),
     tetrapak_task:require_all(Dir, [deps_task("deps:download", Force)]).
 
-boot_dir_rec(Dir) ->
+boot_dir_rec({_, _, Dir}) ->
     filelib:is_dir(Dir) andalso (ok = tetrapak_task:require_all(boot_dir(Dir), ["tetrapak:depsboot"])).
 
 boot_dir({_, _, Dir}) ->
