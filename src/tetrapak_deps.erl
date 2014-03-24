@@ -48,13 +48,13 @@ run("tetrapak:load:path", _) ->
     done;
 
 run("tetrapak:load:deps", _) ->
+    ok = tetrapak_task:require_all(["tetrapak:depsboot"]),
     on_deps(fun({_, _, Dir}) ->
                     case filelib:is_dir(Dir) of
-                        true ->
-                            ok = tetrapak_task:require_all(["tetrapak:depsboot"]),
-                            ok = tetrapak_task:require_all(Dir, ["tetrapak:load:path", "tetrapak:load:deps"]);
+                        true  ->
+                            tetrapak_task:require_all(Dir, ["tetrapak:load:path", "tetrapak:load:deps"]);
                         false ->
-                            ok
+                            io:format("dependency doesn't exists: ~s~n", [Dir])
                     end
             end),
     done;
@@ -99,7 +99,7 @@ deps_build(Deps, Force) ->
 deps_dirs() ->
     Manager  = init_manager(),
     Deps     = get_deps(),
-    [build_dir(Dep, Manager) || Dep <- Deps].
+    lists:filter(fun(R) -> R =/= undefined end, [build_dir(Dep, Manager) || Dep <- Deps]).
 
 init_manager() ->
     {ok, ErlLibs} = application:get_env(tetrapak_deps, erl_libs),
@@ -157,7 +157,10 @@ load_cache(ErlLibsDir) ->
 
 build_dir({App, {git, Repo}}, Manager) -> build_dir({App, {git, Repo, "master"}}, Manager);
 build_dir({App, {git, Repo, Info}}, #lib_manager{lib_dir = LibDir}) ->
-    {App, {git, Repo, Info}, filename:join(LibDir, build_folder_name(atom_to_list(App), Info))}.
+    {App, {git, Repo, Info}, filename:join(LibDir, build_folder_name(atom_to_list(App), Info))};
+build_dir(Value, _Manager) ->
+    io:format("unsupported format: ~p~n", [Value]),
+    undefined.
 
 build_folder_name(AppName, Value) -> AppName ++ "-" ++ cut(Value).
 
@@ -180,7 +183,7 @@ download_app_rec(Dir, Force) ->
     tetrapak_task:require_all(Dir, [deps_task("deps:download", Force)]).
 
 boot_dir_rec(Dir) ->
-    ok = tetrapak_task:require_all(boot_dir(Dir), ["tetrapak:depsboot"]).
+    filelib:is_dir(Dir) andalso (ok = tetrapak_task:require_all(boot_dir(Dir), ["tetrapak:depsboot"])).
 
 boot_dir({_, _, Dir}) ->
     boot_dir(Dir);
