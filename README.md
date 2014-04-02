@@ -13,6 +13,9 @@ Oneliner:
 
     curl https://raw.github.com/travelping/tetrapak_deps/master/installer.sh | sh
 
+For people, that have a problem with cloning repos with sudo, please use cloner.sh, build_install.sh extern and
+see installer.sh for more information on use.
+
 Format
 ======
 
