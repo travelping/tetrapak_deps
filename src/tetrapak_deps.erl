@@ -51,7 +51,6 @@ run("tetrapak:load:path", _) ->
 run("tetrapak:load:deps", _) ->
     ok = tetrapak_task:require_all(["tetrapak:depsboot"]),
     on_deps(fun({_, _, Dir}) ->
-                    io:format(user, "try load: ~s~n", [Dir]),
                     case filelib:is_dir(Dir) of
                         true  ->
                             ok = tetrapak_task:require_all(Dir, ["tetrapak:load:path", "tetrapak:load:deps"]);
@@ -175,9 +174,14 @@ download_app({_App, {git, Repo, Info}, Dir} = Dep, Acc, Force) ->
             Acc;
         {Exists, _} ->
             Force andalso Exists andalso tpk_file:delete(Dir),
-            {ok, _} = git:download(Repo, Dir, Info),
-            download_app_rec(Dir, Force),
-            [Dep | Acc]
+            case git:download(Repo, Dir, Info) of
+                {ok, _} ->
+                    download_app_rec(Dir, Force),
+                    [Dep | Acc];
+                {error, Error} ->
+                    tpk_file:delete(Dir),
+                    tetrapak:fail("can't download dependency ~p ~p~nError: ~p", [Repo, Info, Error])
+            end
     end.
 
 download_app_rec(Dir, Force) ->
