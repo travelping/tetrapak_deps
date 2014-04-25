@@ -34,7 +34,8 @@ tasks(tasks) ->
     ];
 
 tasks(_) ->
-    [].
+    [{"tetrapak:deps",       ?MODULE, "Get dependencies"},
+     {"tetrapak:depsboot",   ?MODULE, "Apply boot on all dependencies"}].
 
 run("tetrapak:deps", _) ->
     {done, [{info, deps_dirs()}]};
