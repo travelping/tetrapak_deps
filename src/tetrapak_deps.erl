@@ -213,6 +213,6 @@ check_deps_new(EbinPath) ->
     check_deps(EbinPath).
 
 is_erlang_app() ->
-    tpk_file:exists_in("src", "*.app.src") orelse
-    tpk_file:exists_in("ebin", "*.app") orelse
+    tpk_file:exists_in(tetrapak:path("src"), "*.app.src") orelse
+    tpk_file:exists_in(tetrapak:path("ebin"), "*.app") orelse
     filelib:is_file(filename:join([tetrapak:path("tetrapak"), "config.ini"])).
