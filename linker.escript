@@ -2,7 +2,7 @@
 %%! -hidden -connect_all false -smp disable -kernel inet_dist_use_interface {127,0,0,1}
 
 main([]) ->
-    case os:cmd("whereis erl") of
+    case os:cmd("which erl") of
         ""   ->
             io:format("'whereis erl' was not found~n", []);
         Path ->
